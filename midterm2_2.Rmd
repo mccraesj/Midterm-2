@@ -125,12 +125,32 @@ spotifyNumWords <- sentimentBoth %>%
   summarize(N=n()) %>%
   arrange(desc(N))
 
+spotifyRaw <- spotifyRaw %>%
+  mutate(Song.Name = str_replace_all(Song.Name, "[^a-zA-Z]", ""))
+
+spotifyNumWords <- spotifyNumWords %>%
+  mutate(Song.Name = str_replace_all(Song.Name, "[^a-zA-Z]", ""))
+
+"‘tis the damn season" == "​'tis the damn season"
+
 combinedSpot <- spotifyRaw %>%
   inner_join(spotifyNumWords, by = "Song.Name")
+
+combinedSpotwide <- combinedSpot %>%
+  pivot_wider(names_from = sentiment, 
+              values_from = N) %>%
+  mutate(precentPos = positive / (positive + negative))
+
+dance <- ggplot(combinedSpotwide, aes(x = Song.Name, y = Danceability)) + 
+  geom_col(aes(fill = precentPos))
+
+tempo <- ggplot(combinedSpotwide, aes(x = Song.Name, y = Tempo)) + 
+  geom_col(aes(fill = precentPos))
 
 # Dashboard
 
 Dashboard <- (EvermoreWordcloud | folkWordcloud) /
-  (bothCloud | sentBar)
+  (bothCloud | sentBar) /
+  (dance | tempo)
 Dashboard
 ```
