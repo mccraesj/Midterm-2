@@ -1,0 +1,136 @@
+---
+title: "midterm2_2"
+author: "Spencer McCrae"
+date: "2025-11-20"
+output: html_document
+---
+
+```{r}
+library(tidyverse)
+library(ggplot2)
+library(patchwork)
+library(dplyr)
+library(stringr)
+library(tidyverse)
+library(tidytext)
+library(ggwordcloud)
+
+taylorRawWords <- read.csv(url("https://raw.githubusercontent.com/adashofdata/taylor_swift_data/refs/heads/main/Taylor_Swift_Genius/taylor_swift_genius_data.csv"))
+
+# For this we will choose evermore and folklore
+
+taylorEvermore <- taylorRawWords %>%
+  filter(Album == "evermore")
+
+taylorFolklore <- taylorRawWords %>%
+  filter(Album == "folklore")
+
+# Cleaning the data 
+
+tidyEvermore <- taylorEvermore %>%
+  unnest_tokens(word, Lyrics)
+
+tidyFolklore <- taylorFolklore %>%
+  unnest_tokens(word, Lyrics)
+
+# Word clouds
+
+stopwords <- get_stopwords()
+
+evermorePop <- tidyEvermore %>%
+  filter(!word %in% stopwords$word) %>%
+  anti_join(stop_words) %>%
+  group_by(word) %>%
+  summarise(N = n()) %>% 
+  arrange(desc(N)) %>%
+  slice(1:100)
+
+EvermoreWordcloud <- ggplot(evermorePop, aes(label = word, size = N)) + 
+  geom_text_wordcloud() + 
+  scale_size_area(max_size = 5) +
+  theme_minimal() +
+  labs(title = "evermore wordcloud")
+
+folkPop <- tidyFolklore %>%
+  filter(!word %in% stopwords$word) %>%
+  anti_join(stop_words) %>%
+  group_by(word) %>%
+  summarise(N = n()) %>% 
+  arrange(desc(N)) %>%
+  slice(1:100)
+
+folkWordcloud <- ggplot(folkPop, aes(label = word, size = N)) + 
+  geom_text_wordcloud() + 
+  scale_size_area(max_size = 5) +
+  theme_minimal() +
+  labs(title = "folklore wordcloud")
+
+EvermoreWordcloud
+folkWordcloud
+
+# Sentiment Graphs
+
+word_sentiments <- get_sentiments("bing")
+
+sentever <- evermorePop %>%
+  inner_join(word_sentiments, by="word")
+
+sentfolk <- folkPop %>%
+  inner_join(word_sentiments, by="word")
+
+bothtaylor <- taylorRawWords %>%
+  filter(Album == "evermore" | Album == "folklore")
+
+tidyboth <- bothtaylor %>%
+  unnest_tokens(word, Lyrics)
+
+bothPop <- tidyboth %>%
+  group_by(word) %>%
+  summarize(N=n()) %>%
+  arrange(desc(N)) %>%
+  inner_join(word_sentiments, by="word") %>%
+  slice(1:100)
+
+sentboth <- bothPop %>%
+  inner_join(word_sentiments, by="word")
+
+bothCloud <- ggplot(bothPop, aes(label = word, size = N, color = sentiment)) + 
+  geom_text_wordcloud() + 
+  scale_color_manual(values = c("positive" = "green4", "negative" = "coral")) +
+  scale_size_area(max_size = 5) +
+  theme_minimal() +
+  labs(title = "Both albums colored by sentiment")
+
+sentimentBoth <- tidyboth %>%
+  inner_join(word_sentiments, by="word")
+
+sentBar <- ggplot(sentimentBoth) +
+  geom_bar(aes(x=Album, fill=sentiment)) +
+  scale_fill_manual(values = c("positive" = "#88E788", "negative" = "coral")) +
+  coord_cartesian(expand=F) +
+  theme_minimal()
+
+# Spotify 
+
+spotifyRaw <- read.csv(url("https://raw.githubusercontent.com/adashofdata/taylor_swift_data/refs/heads/main/Taylor_Swift_Spotify/taylor_swift_spotify_data.csv"))
+
+spotever <- spotifyRaw %>%
+  filter(Album == "evermore")
+
+spotfolk <- spotifyRaw %>%
+  filter(Album == "folklore")
+
+spotifyNumWords <- sentimentBoth %>%
+  group_by(Song.Name, sentiment) %>%
+  summarize(N=n()) %>%
+  arrange(desc(N))
+
+combinedSpot <- spotifyRaw %>%
+  inner_join(spotifyNumWords, by = "Song.Name")
+
+# Dashboard
+
+Dashboard <- (EvermoreWordcloud | folkWordcloud) /
+  (bothCloud | sentBar)
+Dashboard
+```
