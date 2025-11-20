@@ -1,0 +1,147 @@
+---
+title: "Midterm 2"
+author: "Spencer McCrae"
+date: "2025-11-18"
+output: html_document
+---
+
+```{r}
+library(tidyverse)
+library(ggplot2)
+library(maps)
+library(patchwork)
+
+# Receiving data
+milkConsumption <- read.csv(url("https://raw.githubusercontent.com/mahsaashouri/STA309-Dataset/refs/heads/main/Milk-Production-Consumption/per-capita-milk-consumption.csv"))
+
+milkProduction <- read.csv(url("https://raw.githubusercontent.com/mahsaashouri/STA309-Dataset/refs/heads/main/Milk-Production-Consumption/milk-production-tonnes.csv"))
+
+# Cleaning data 
+
+# First renaming the odd variable
+# Then removing any of the variables in our dataframe that have NA (except code)
+
+milkConsumptionClean <- milkConsumption %>%
+  mutate(milkConsumptionKG = Milk.consumption..kilograms.per.year.per.capita.) %>%
+  select(Entity, Code, Year, milkConsumptionKG) %>%
+  filter(!is.na(Entity)) %>%
+  filter(!is.na(Year)) %>%
+  filter(!is.na(milkConsumptionKG))
+
+milkConsumptionClean <- milkConsumptionClean %>%
+  mutate(Entity = case_when(
+    Entity == "United States" ~ "USA",
+    Entity == "United Kingdom" ~ "UK",
+    TRUE ~ Entity
+  ))
+
+# As we continue, we notice that milk production is in tonnes (not KG)
+# we will also fix that (1 tonne (aka metric ton) is equal to 1000 kg)
+
+milkProductionClean <- milkProduction %>%
+  mutate(milkProductionKG = (Milk.Production..tonnes. * 1000)) %>%
+  select(Entity, Code, Year, milkProductionKG) %>%
+  filter(!is.na(Entity)) %>%
+  filter(!is.na(Year)) %>%
+  filter(!is.na(milkProductionKG))
+
+milkProductionClean <- milkProductionClean %>%
+  mutate(Entity = case_when(
+    Entity == "United States" ~ "USA",
+    Entity == "United Kingdom" ~ "UK",
+    TRUE ~ Entity
+  ))
+
+# Now, I wish to focus on the milk produced/consumed Globally.
+
+globalMilkProd <- milkProductionClean %>%
+  filter(Entity == "World")
+
+globalMilkCons <- milkConsumptionClean %>%
+  filter(Entity == "World")
+
+globalMilk <- globalMilkProd %>%
+  left_join(globalMilkCons) %>%
+  filter(Year != 2022) %>%
+  mutate(logCons = log(milkConsumptionKG, base = 10),
+         logProd = log(milkProductionKG, base = 10))
+
+ggplot(globalMilk, aes(x = Year, y = milkProductionKG)) +
+  geom_line()
+
+ggplot(globalMilk, aes(x = Year, y = milkConsumptionKG)) +
+  geom_line()
+
+# Mapping consumption/prod
+
+world_coordinates <- map_data("world")
+
+milkAverageCons <- milkConsumptionClean %>%
+  group_by(Entity) %>%
+  summarise(avgMilkConsumption = mean(milkConsumptionKG, na.rm = TRUE))
+
+milkMapCons <- world_coordinates %>%
+  left_join(milkAverageCons, by = c("region" = "Entity")) %>%
+  mutate(logCons = log(avgMilkConsumption))
+
+milkAverageProd <- milkProductionClean %>%
+  group_by(Entity) %>%
+  summarise(avgMilkProduction = mean(milkProductionKG, na.rm = TRUE))
+
+milkMapProd <- world_coordinates %>%
+  left_join(milkAverageProd, by = c("region" = "Entity")) %>%
+  mutate(logProd = log(avgMilkProduction))
+
+milkMap <- milkMapCons %>%
+  left_join(milkMapProd)
+
+mapConsumption <- ggplot(milkMapCons, aes(x = long, y = lat, group = group))+ 
+  geom_polygon(aes(fill = logCons)) +
+  scale_fill_gradient(low = "red", high = "green", (title = "Consumption of\nMilk log(KG)")) +
+  geom_path() +
+  theme_map() + 
+  labs(title = "Map of average log(KG)\nconsumption of milk per region") + 
+  theme(legend.position = "right")
+
+mapProdution <- ggplot(milkMapProd, aes(x = long, y = lat, group = group))+ 
+  geom_polygon(aes(fill = logProd)) +
+  scale_fill_gradient(low = "red", high = "green", (title = "Production of\nMilk log(KG)")) +
+  geom_path() +
+  theme_map() +
+  labs(title = "Map of average log(KG)\nproduction of milk per region") +
+  theme(legend.position = "right")
+
+mapConsumption
+mapProdution
+
+# Relationship over time
+
+globalMilkProdLine <- ggplot(globalMilk, aes(x = Year)) +
+  geom_line(aes(y = milkProductionKG)) +
+  theme_minimal() + 
+  labs(y = "Milk Production (KG)")
+
+globalMilkConsLine <- ggplot(globalMilk, aes(x = Year)) +
+  geom_line(aes(y = milkConsumptionKG)) +
+  theme_minimal() + 
+  labs(y = "Milk Consumption (KG)")
+
+globalMilkDiffLine <- ggplot(globalMilk, aes(x = Year)) +
+  geom_line(aes(y = (logProd - logCons))) +
+  theme_minimal() + 
+  labs(y = "Production - Consumption (KG)")
+
+globalMilkProdLine
+globalMilkConsLine
+globalMilkDiffLine
+
+# dashboard
+
+Dashboard <- (mapConsumption | mapProdution) / (globalMilkProdLine | globalMilkConsLine | globalMilkDiffLine)
+
+Dashboard
+
+```
+
+
+Findings: Despite the consumption of milk being variable throughout the years and trending somewhat upwards, there has been a trend of the production of milk growing what appears to be independently of demand. This is supported by the fact that milk production is many factors larger than the consumption and is not largely impacted by the drops in consumption during the 1990s and 2010s. 
